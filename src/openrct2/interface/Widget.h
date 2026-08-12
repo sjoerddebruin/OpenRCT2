@@ -226,4 +226,5 @@ namespace OpenRCT2
 
     constexpr uint16_t kTextInputSize = 1024;
     constexpr uint16_t kTopToolbarHeight = 27;
+    constexpr uint16_t kReservedToolbarSpace = 68;
 } // namespace OpenRCT2

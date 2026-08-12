@@ -187,3 +187,10 @@ int32_t drawTextWrapped(
 
     return layout.GetHeight();
 }
+
+int32_t getWrappedTextHeight(int32_t width, StringId format, const Formatter& ft, TextPaint textPaint)
+{
+    auto formatted = FormatStringIDLegacy(format, ft.Data());
+    StaticLayout layout(formatted, textPaint, width);
+    return layout.GetHeight();
+}

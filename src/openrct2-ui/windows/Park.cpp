@@ -28,16 +28,21 @@
 #include <openrct2/core/UnitConversion.h>
 #include <openrct2/drawing/Drawing.String.h>
 #include <openrct2/drawing/Drawing.h>
+#include <openrct2/drawing/Font.h>
 #include <openrct2/drawing/Rectangle.h>
 #include <openrct2/drawing/Text.h>
 #include <openrct2/localisation/Currency.h>
 #include <openrct2/localisation/Formatting.h>
+#include <openrct2/localisation/Language.h>
+#include <openrct2/localisation/LocalisationService.h>
 #include <openrct2/management/Award.h>
 #include <openrct2/object/PeepAnimationsObject.h>
 #include <openrct2/ride/RideData.h>
+#include <openrct2/ride/RideManager.hpp>
 #include <openrct2/scenario/Scenario.h>
 #include <openrct2/ui/WindowManager.h>
 #include <openrct2/world/Park.h>
+#include <vector>
 
 namespace OpenRCT2::Ui::Windows
 {
@@ -51,6 +56,90 @@ namespace OpenRCT2::Ui::Windows
     static constexpr ScreenCoordsXY kGraphTopLeftPadding{ 45, 20 };
     static constexpr ScreenCoordsXY kGraphBottomRightPadding{ 25, 10 };
     static constexpr uint8_t kGraphNumYLabels = 6;
+
+    static constexpr int32_t kPageBackgroundTop = 43;
+
+    // Settings that make a scenario harder than the default, listed on the objective page.
+    struct ScenarioChallenge
+    {
+        ParkFlag flag;
+        StringId text;
+    };
+
+    static constexpr ScenarioChallenge kScenarioChallenges[] = {
+        { ParkFlag::forbidLandscapeChanges, STR_CHALLENGE_FORBID_LANDSCAPE_CHANGES },
+        { ParkFlag::forbidTreeRemoval, STR_CHALLENGE_FORBID_TREE_REMOVAL },
+        { ParkFlag::forbidHighConstruction, STR_CHALLENGE_FORBID_HIGH_CONSTRUCTION },
+        { ParkFlag::forbidMarketingCampaigns, STR_CHALLENGE_FORBID_MARKETING_CAMPAIGNS },
+        { ParkFlag::difficultGuestGeneration, STR_CHALLENGE_HARD_GUEST_GENERATION },
+        { ParkFlag::difficultParkRating, STR_CHALLENGE_HARD_PARK_RATING },
+    };
+
+    static bool hasPreservedRides(const GameState_t& gameState)
+    {
+        for (const auto& ride : RideManager(gameState))
+        {
+            if (ride.flags.hasAny(RideFlag::indestructible, RideFlag::indestructibleTrack))
+                return true;
+        }
+        return false;
+    }
+
+    static std::vector<StringId> getScenarioChallenges(const GameState_t& gameState)
+    {
+        std::vector<StringId> challenges;
+        for (const auto& challenge : kScenarioChallenges)
+        {
+            if (gameState.park.flags.has(challenge.flag))
+                challenges.push_back(challenge.text);
+        }
+
+        const auto preferLess = gameState.park.flags.has(ParkFlag::guestPreferLessIntenseRides);
+        const auto preferMore = gameState.park.flags.has(ParkFlag::guestPreferMoreIntenseRides);
+        if (preferLess && !preferMore)
+            challenges.push_back(STR_CHALLENGE_INTENSITY_PREFERENCE_LESS);
+        else if (preferMore && !preferLess)
+            challenges.push_back(STR_CHALLENGE_INTENSITY_PREFERENCE_MORE);
+
+        if (!gameState.cheats.makeAllDestructible && hasPreservedRides(gameState))
+            challenges.push_back(STR_CHALLENGE_PRESERVED_RIDES);
+
+        if (gameState.scenarioOptions.objective.Type == Scenario::ObjectiveType::guestsAndRating)
+            challenges.push_back(STR_CHALLENGE_PARK_MUST_STAY_OPEN);
+
+        return challenges;
+    }
+
+    // Everything the objective page's layout depends on, cheap enough to compare every tick. Laying
+    // the page out is not, as it measures every line of text.
+    struct ObjectivePageInputs
+    {
+        uint64_t parkFlags{};
+        Scenario::Objective objective{};
+        money64 completedCompanyValue{};
+        int32_t screenHeight{};
+        int32_t language{ LANGUAGE_UNDEFINED };
+        int32_t lineHeight{};
+
+        bool operator==(const ObjectivePageInputs& other) const
+        {
+            return parkFlags == other.parkFlags && objective.Type == other.objective.Type
+                && objective.Year == other.objective.Year && objective.NumGuests == other.objective.NumGuests
+                && objective.Currency == other.objective.Currency
+                && completedCompanyValue == other.completedCompanyValue && screenHeight == other.screenHeight
+                && language == other.language && lineHeight == other.lineHeight;
+        }
+    };
+
+    // Offsets on the objective page, before the enlarged title bar is taken into account.
+    static constexpr int32_t kObjectivePageContentTop = kPageBackgroundTop + 7;
+    static constexpr int32_t kObjectivePageBottomPadding = 6;
+
+    static constexpr int32_t kChallengeIndent = 12;
+    static constexpr int32_t kObjectiveContentWidth = 222;
+    static constexpr int32_t kObjectiveScrollPadding = 4;
+    static constexpr int32_t kObjectiveScrollContentWidth = kObjectiveContentWidth - (kScrollBarWidth + 1)
+        - (kObjectiveScrollPadding * 2);
 
     enum WindowParkPage
     {
@@ -92,7 +181,8 @@ namespace OpenRCT2::Ui::Windows
         WIDX_INCREASE_PRICE,
         WIDX_DECREASE_PRICE,
 
-        WIDX_ENTER_NAME = 11
+        WIDX_ENTER_NAME = 11,
+        WIDX_OBJECTIVE_SCROLL
     };
 
 #pragma region Widgets
@@ -101,7 +191,7 @@ namespace OpenRCT2::Ui::Windows
     static constexpr auto makeParkWidgets = [](int16_t width) {
         return makeWidgets(
             makeWindowShim(kWindowTitle, { width, kWindowHeight }),
-            makeWidget({   0, 43 }, { width, 131 }, WidgetType::resize, WindowColour::secondary),
+            makeWidget({   0, kPageBackgroundTop }, { width, 131 }, WidgetType::resize, WindowColour::secondary),
             makeTab   ({   3, 17 }, STR_PARK_ENTRANCE_TAB_TIP                                  ),
             makeTab   ({  34, 17 }, STR_PARK_RATING_TAB_TIP                                    ),
             makeTab   ({  65, 17 }, STR_PARK_GUESTS_TAB_TIP                                    ),
@@ -144,7 +234,8 @@ namespace OpenRCT2::Ui::Windows
 
     static constexpr auto _objectiveWidgets = makeWidgets(
         makeParkWidgets(230),
-        makeWidget({7, 207}, {216, 14}, WidgetType::button, WindowColour::secondary, STR_ENTER_NAME_INTO_SCENARIO_CHART) // enter name
+        makeWidget({7, 207}, {216, 14}, WidgetType::button, WindowColour::secondary, STR_ENTER_NAME_INTO_SCENARIO_CHART), // enter name
+        makeWidget({3,  46}, {224, 155}, WidgetType::scroll, WindowColour::secondary, SCROLL_VERTICAL                  )  // only shown when the page does not fit; sized by layoutObjectivePage()
     );
 
     static constexpr auto _awardsWidgets = makeWidgets(
@@ -176,6 +267,11 @@ namespace OpenRCT2::Ui::Windows
 
         ScreenRect _ratingGraphBounds;
         ScreenRect _guestGraphBounds;
+
+        bool _objectivePageScrolls = false;
+
+        std::vector<StringId> _objectiveChallenges;
+        ObjectivePageInputs _objectivePageInputs;
 
         ParkData& _parkData;
 
@@ -355,6 +451,20 @@ namespace OpenRCT2::Ui::Windows
                     onPrepareDrawAwards();
                     break;
             }
+        }
+
+        ScreenSize onScrollGetSize(int32_t scrollIndex) override
+        {
+            if (page == WINDOW_PARK_PAGE_OBJECTIVE)
+                return onScrollGetSizeObjective();
+
+            return {};
+        }
+
+        void onScrollDraw(int32_t scrollIndex, RenderTarget& rt) override
+        {
+            if (page == WINDOW_PARK_PAGE_OBJECTIVE)
+                onScrollDrawObjective(rt);
         }
 
         void onDraw(RenderTarget& rt) override
@@ -994,20 +1104,104 @@ namespace OpenRCT2::Ui::Windows
             }
         }
 
-        void onResizeObjective()
+        // Drawing is clipped to the size the window had when the draw started, so this has to run
+        // before it, from onUpdate() rather than onPrepareDraw().
+        void resizeObjectivePage()
         {
+            auto& gameState = getGameState();
+            const ObjectivePageInputs inputs{
+                gameState.park.flags.holder,       gameState.scenarioOptions.objective,
+                gameState.scenarioCompletedCompanyValue, ContextGetHeight(),
+                LocalisationService_GetCurrentLanguage(), FontGetLineHeight(FontStyle::medium),
+            };
+
+            auto challenges = getScenarioChallenges(gameState);
+            if (inputs == _objectivePageInputs && challenges == _objectiveChallenges)
+                return;
+
+            _objectivePageInputs = inputs;
+            _objectiveChallenges = std::move(challenges);
+
+            int32_t minHeightForPage = 226;
 #ifndef DISABLE_TTF
             if (gCurrentTTFFontSet != nullptr)
-                WindowSetResize(*this, { 230, 270 }, { 230, 270 });
-            else
+                minHeightForPage = 270;
 #endif
-                WindowSetResize(*this, { 230, 226 }, { 230, 226 });
+
+            auto pageHeight = kObjectivePageContentTop + layoutObjectivePageText(nullptr, {}, kObjectiveContentWidth)
+                + kObjectivePageBottomPadding;
+            if (getGameState().park.flags.has(ParkFlag::scenarioCompleteNameInput))
+                pageHeight += widgets[WIDX_ENTER_NAME].height() + 5;
+
+            const auto maxHeightForPage = std::max(minHeightForPage, ContextGetHeight() - kReservedToolbarSpace);
+            const auto newHeight = static_cast<int16_t>(std::clamp(pageHeight, minHeightForPage, maxHeightForPage));
+            WindowSetResize(*this, { 230, newHeight }, { 230, newHeight });
+
+            // Only scroll a page that does not fit, so the text keeps its full width where there is room.
+            const auto wasScrolling = _objectivePageScrolls;
+            _objectivePageScrolls = pageHeight > maxHeightForPage;
+            layoutObjectivePage();
+
+            if (_objectivePageScrolls)
+            {
+                // The scroll area has to be in place before its contents are measured.
+                if (!wasScrolling)
+                    initScrollWidgets();
+
+                // The contents can change while the window is open, e.g. when the language changes.
+                scrolls[0].contentHeight = onScrollGetSizeObjective().height + 1;
+                widgetScrollUpdateThumbs(*this, WIDX_OBJECTIVE_SCROLL);
+            }
+        }
+
+        void layoutObjectivePage()
+        {
+            // Show name input button on scenario completion.
+            auto& nameButton = widgets[WIDX_ENTER_NAME];
+            if (getGameState().park.flags.has(ParkFlag::scenarioCompleteNameInput))
+            {
+                nameButton.setVisible();
+                nameButton.top = height - 19;
+                nameButton.bottom = height - 6;
+            }
+            else
+                nameButton.setHidden();
+
+            auto& scrollWidget = widgets[WIDX_OBJECTIVE_SCROLL];
+            if (_objectivePageScrolls)
+            {
+                scrollWidget.type = WidgetType::scroll;
+                scrollWidget.right = width - 4;
+                scrollWidget.bottom = nameButton.isVisible() ? nameButton.top - 3 : height - 4;
+            }
+            else
+                scrollWidget.type = WidgetType::empty;
+        }
+
+        ScreenSize onScrollGetSizeObjective()
+        {
+            const auto textHeight = layoutObjectivePageText(nullptr, {}, kObjectiveScrollContentWidth);
+            return { 0, textHeight + kObjectiveScrollPadding * 2 };
+        }
+
+        void onScrollDrawObjective(RenderTarget& rt)
+        {
+            const ScreenCoordsXY origin{ kObjectiveScrollPadding, kObjectiveScrollPadding };
+            layoutObjectivePageText(&rt, origin, kObjectiveScrollContentWidth);
+        }
+
+        void onResizeObjective()
+        {
+            // The height can be left over from another page, so always lay the page out again here.
+            _objectivePageInputs = {};
+            resizeObjectivePage();
         }
 
         void onUpdateObjective()
         {
             currentFrame++;
             invalidateWidget(WIDX_TAB_6);
+            resizeObjectivePage();
         }
 
         void onTextInputObjective(WidgetIndex widgetIndex, std::string_view text)
@@ -1041,63 +1235,104 @@ namespace OpenRCT2::Ui::Windows
         {
             SetPressedTab();
             PrepareWindowTitleText();
-
-            // Show name input button on scenario completion.
-            if (getGameState().park.flags.has(ParkFlag::scenarioCompleteNameInput))
-            {
-                widgets[WIDX_ENTER_NAME].setVisible();
-                widgets[WIDX_ENTER_NAME].top = height - 19;
-                widgets[WIDX_ENTER_NAME].bottom = height - 6;
-            }
-            else
-                widgets[WIDX_ENTER_NAME].setHidden();
+            layoutObjectivePage();
 
             WindowAlignTabs(this, WIDX_TAB_1, WIDX_TAB_7);
         }
 
-        void onDrawObjective(RenderTarget& rt)
+        // Returns the height the text occupies. A render target draws it too; none measures only.
+        int32_t layoutObjectivePageText(RenderTarget* rt, ScreenCoordsXY screenCoords, int32_t contentWidth)
         {
             auto& gameState = getGameState();
-            drawWidgets(rt);
-            DrawTabImages(rt);
+            const auto startY = screenCoords.y;
+
+            auto drawParagraph = [&](StringId format, const Formatter& ft) {
+                screenCoords.y += rt != nullptr ? drawTextWrapped(*rt, screenCoords, contentWidth, format, ft)
+                                                : getWrappedTextHeight(contentWidth, format, ft);
+            };
+            // The row has to fit the font in use, which can be taller than a list row.
+            const auto labelHeight = std::max<int32_t>(kListRowHeight, FontGetLineHeight(FontStyle::medium));
+            auto drawLabel = [&](StringId format) {
+                if (rt != nullptr)
+                    drawText(*rt, screenCoords, format);
+                screenCoords.y += labelHeight;
+            };
+            // The marker is drawn separately from the text, so that wrapped lines keep the indent.
+            auto drawChallenge = [&](StringId text) {
+                auto challengeFt = Formatter();
+                challengeFt.Add<StringId>(text);
+
+                const auto textWidth = contentWidth - kChallengeIndent;
+                if (rt == nullptr)
+                {
+                    screenCoords.y += getWrappedTextHeight(textWidth, STR_BLACK_STRING, challengeFt);
+                    return;
+                }
+
+                drawText(*rt, screenCoords, STR_EXTRA_CHALLENGE_MARKER);
+                screenCoords.y += drawTextWrapped(
+                    *rt, screenCoords + ScreenCoordsXY{ kChallengeIndent, 0 }, textWidth, STR_BLACK_STRING, challengeFt);
+            };
 
             // Scenario description
-            auto screenCoords = windowPos
-                + ScreenCoordsXY{ widgets[WIDX_PAGE_BACKGROUND].left + 4, widgets[WIDX_PAGE_BACKGROUND].top + 7 };
             auto ft = Formatter();
             ft.Add<StringId>(STR_STRING);
             ft.Add<const char*>(gameState.scenarioOptions.details.c_str());
-            screenCoords.y += drawTextWrapped(rt, screenCoords, 222, STR_BLACK_STRING, ft);
+            drawParagraph(STR_BLACK_STRING, ft);
             screenCoords.y += 5;
 
             // Your objective:
-            drawText(rt, screenCoords, STR_OBJECTIVE_LABEL);
-            screenCoords.y += kListRowHeight;
+            drawLabel(STR_OBJECTIVE_LABEL);
 
             // Objective
             ft = Formatter();
             formatObjective(ft, gameState.scenarioOptions.objective);
-
-            screenCoords.y += drawTextWrapped(
-                rt, screenCoords, 221, kObjectiveNames[EnumValue(gameState.scenarioOptions.objective.Type)], ft);
+            drawParagraph(kObjectiveNames[EnumValue(gameState.scenarioOptions.objective.Type)], ft);
             screenCoords.y += 5;
+
+            // Extra challenges
+            if (!_objectiveChallenges.empty())
+            {
+                drawLabel(STR_EXTRA_CHALLENGES_LABEL);
+                for (auto challenge : _objectiveChallenges)
+                {
+                    drawChallenge(challenge);
+                }
+                screenCoords.y += 5;
+            }
 
             // Objective outcome
             if (gameState.scenarioCompletedCompanyValue != kMoney64Undefined)
             {
+                ft = Formatter();
                 if (gameState.scenarioCompletedCompanyValue == kCompanyValueOnFailedObjective)
                 {
                     // Objective failed
-                    drawTextWrapped(rt, screenCoords, 222, STR_OBJECTIVE_FAILED);
+                    drawParagraph(STR_OBJECTIVE_FAILED, ft);
                 }
                 else
                 {
                     // Objective completed
-                    ft = Formatter();
                     ft.Add<money64>(gameState.scenarioCompletedCompanyValue);
-                    drawTextWrapped(rt, screenCoords, 222, STR_OBJECTIVE_ACHIEVED, ft);
+                    drawParagraph(STR_OBJECTIVE_ACHIEVED, ft);
                 }
             }
+
+            return screenCoords.y - startY;
+        }
+
+        void onDrawObjective(RenderTarget& rt)
+        {
+            drawWidgets(rt);
+            DrawTabImages(rt);
+
+            // When the page scrolls, the text is drawn by onScrollDrawObjective() instead.
+            if (_objectivePageScrolls)
+                return;
+
+            auto screenCoords = windowPos
+                + ScreenCoordsXY{ widgets[WIDX_PAGE_BACKGROUND].left + 4, widgets[WIDX_PAGE_BACKGROUND].top + 7 };
+            layoutObjectivePageText(&rt, screenCoords, kObjectiveContentWidth);
         }
 #pragma endregion
 

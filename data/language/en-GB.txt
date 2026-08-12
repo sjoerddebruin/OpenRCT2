@@ -3837,3 +3837,15 @@ STR_7037    :Operating mode
 STR_7038    :Wait and load
 STR_7039    :Ride type
 STR_7040    :Footpath additions
+STR_7041    :{WINDOW_COLOUR_2}Extra challenges:
+STR_7042    :{BLACK}»
+STR_7043    :Landscape changes are forbidden
+STR_7044    :Tree removal is forbidden
+STR_7045    :High construction is forbidden
+STR_7046    :Marketing campaigns are forbidden
+STR_7047    :Guests are harder to attract
+STR_7048    :Park rating is harder to maintain
+STR_7049    :The park must stay open
+STR_7050    :Guests only want less intense rides
+STR_7051    :Guests only want more intense rides
+STR_7052    :Some rides cannot be demolished

@@ -237,3 +237,8 @@ int32_t drawTextWrapped(
 int32_t drawTextWrapped(
     OpenRCT2::Drawing::RenderTarget& rt, const ScreenCoordsXY& coords, int32_t width, u8string_view string,
     TextPaint textPaint = {});
+
+/**
+ * Returns the height drawTextWrapped() would occupy, without drawing anything.
+ */
+int32_t getWrappedTextHeight(int32_t width, StringId format, const OpenRCT2::Formatter& ft, TextPaint textPaint = {});

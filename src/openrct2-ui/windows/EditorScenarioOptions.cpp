@@ -2245,6 +2245,10 @@ namespace OpenRCT2::Ui::Windows
             if (currentRide != nullptr)
             {
                 currentRide->flags.flip(RideFlag::indestructible);
+
+                // The objective page mentions whether any ride is preserved.
+                auto* windowMgr = GetWindowManager();
+                windowMgr->InvalidateByClass(WindowClass::parkInformation);
             }
             invalidate();
         }

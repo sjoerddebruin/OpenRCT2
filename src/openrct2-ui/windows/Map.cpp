@@ -1210,7 +1210,7 @@ namespace OpenRCT2::Ui::Windows
             width += getPracticalMapSize() > initWidth ? kScrollBarWidth : 2;
             height += getMiniMapWidth() > initHeight ? kScrollBarWidth : 2;
 
-            auto maxWindowHeight = ContextGetHeight() - 68;
+            auto maxWindowHeight = ContextGetHeight() - kReservedToolbarSpace;
             width = std::min<int16_t>(width, ContextGetWidth());
             height = std::min<int16_t>(height, maxWindowHeight);
 
@@ -1223,7 +1223,7 @@ namespace OpenRCT2::Ui::Windows
         {
             auto newMaxWidth = std::clamp(getMiniMapWidth() + GetReservedRightSpace(), kWindowSize.width, ContextGetWidth());
             auto newMaxHeight = std::clamp(
-                getMiniMapWidth() + kReservedTopSpace + GetReservedBottomSpace(), kWindowSize.height, ContextGetHeight() - 68);
+                getMiniMapWidth() + kReservedTopSpace + GetReservedBottomSpace(), kWindowSize.height, ContextGetHeight() - kReservedToolbarSpace);
 
             auto scrollbarSize = getMiniMapWidth() + GetReservedRightSpace() > ContextGetWidth() ? kScrollBarWidth : 2;
             newMaxWidth += scrollbarSize;

@@ -3,6 +3,7 @@
 - Feature: [#26827] [Plugin] Add map resize hook to scripting api.
 - Feature: [#26877] Clear Scenery can remove footpath additions or walls separately.
 - Improved: [#26099] The ride type selection cheat has been moved into the ride operations tab.
+- Improved: The objective tab now lists the extra challenges a scenario imposes.
 - Improved: [#26099] The ride visiblity cheat has been moved into the ride colour/appearance tab.
 - Improved: [#26862] Add a Liquid Glass app icon for macOS 26 and later.
 - Fix: [#25169] The convert command strips custom objects from the resulting park.

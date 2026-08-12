@@ -55,7 +55,6 @@ namespace OpenRCT2::GameActions
                     // Invalidate all windows that have anything to do with finance
                     windowMgr->InvalidateByClass(WindowClass::ride);
                     windowMgr->InvalidateByClass(WindowClass::peep);
-                    windowMgr->InvalidateByClass(WindowClass::parkInformation);
                     windowMgr->InvalidateByClass(WindowClass::finances);
                     windowMgr->InvalidateByClass(WindowClass::bottomToolbar);
                     windowMgr->InvalidateByClass(WindowClass::topToolbar);
@@ -147,13 +146,11 @@ namespace OpenRCT2::GameActions
                         park.flags.set(ParkFlag::freeEntry);
                         park.flags.set(ParkFlag::unlockAllPrices);
                     }
-                    windowMgr->InvalidateByClass(WindowClass::parkInformation);
                     windowMgr->InvalidateByClass(WindowClass::ride);
                 }
                 break;
             case ScenarioSetSetting::parkChargeEntryFee:
                 park.entranceFee = std::clamp<money64>(_value, 0.00_GBP, kMaxEntranceFee);
-                windowMgr->InvalidateByClass(WindowClass::parkInformation);
                 break;
             case ScenarioSetSetting::forbidTreeRemoval:
                 park.flags.set(ParkFlag::forbidTreeRemoval, _value != 0);
@@ -183,6 +180,7 @@ namespace OpenRCT2::GameActions
                 return Result(Status::invalidParameters, STR_ERR_INVALID_PARAMETER, STR_ERR_VALUE_OUT_OF_RANGE);
         }
         windowMgr->InvalidateByClass(WindowClass::editorScenarioOptions);
+        windowMgr->InvalidateByClass(WindowClass::parkInformation);
         return Result();
     }
 } // namespace OpenRCT2::GameActions
